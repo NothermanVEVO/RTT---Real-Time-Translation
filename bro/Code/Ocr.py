@@ -13,8 +13,10 @@ def create(lang: str, use_model: bool = True, det_db_unclip_ratio: float = 1.6) 
     global _ocr
     if use_model:
         _ocr = PaddleOCR(use_angle_cls=True,
-                         det_model_dir='models\\ch_ppocr_server_v2.0_det_infer',
-                         rec_model_dir='models\\ch_ppocr_server_v2.0_rec_infer',
+                        #  det_model_dir='models\\ch_ppocr_server_v2.0_det_infer',
+                        #  rec_model_dir='models\\ch_ppocr_server_v2.0_rec_infer',
+                         det_model_dir='models\\en_PP-OCRv3_det_infer',
+                         rec_model_dir='models\\en_PP-OCRv3_rec_infer',
                          cls_model_dir='models\\ch_ppocr_mobile_v2.0_cls_infer',
                          ocr_version='PP-OCRv4',
                          use_space_char=True,
@@ -140,7 +142,7 @@ def find_subimage(image: np.ndarray, subimage: np.ndarray, threshold: float = 0.
 
     return posicao[0]
 
-def find_subimage_exact(image: np.ndarray, subimage: np.ndarray, tolerance: float = 1e-3) -> Optional[Tuple[int, int]]:
+def find_subimage_exact(image: np.ndarray, subimage: np.ndarray, tolerance: float = 1e-1) -> Optional[Tuple[int, int]]:
     if len(image.shape) == 3:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     if len(subimage.shape) == 3:
@@ -175,50 +177,50 @@ def get_contrast_color(pil_image: Image.Image) -> QtGui.QColor:
     return QtGui.QColor('black') if luminance > 128 else QtGui.QColor('white')
 
 
-from numba import njit
+# from numba import njit
 
-@njit
-def _buscar_subimagem_gray(maior, menor):
-    ih, iw = maior.shape
-    sh, sw = menor.shape
+# @njit
+# def _buscar_subimagem_gray(maior, menor):
+#     ih, iw = maior.shape
+#     sh, sw = menor.shape
 
-    for y in range(ih - sh + 1):
-        for x in range(iw - sw + 1):
-            match = True
-            for dy in range(sh):
-                for dx in range(sw):
-                    if maior[y + dy, x + dx] != menor[dy, dx]:
-                        match = False
-                        break
-                if not match:
-                    break
-            if match:
-                return x, y
-    # print("not found")
-    return -1, -1
+#     for y in range(ih - sh + 1):
+#         for x in range(iw - sw + 1):
+#             match = True
+#             for dy in range(sh):
+#                 for dx in range(sw):
+#                     if maior[y + dy, x + dx] != menor[dy, dx]:
+#                         match = False
+#                         break
+#                 if not match:
+#                     break
+#             if match:
+#                 return x, y
+#     # print("not found")
+#     return -1, -1
 
-def encontrar_subimagem_exata(imagem_maior, subimagem):
-    """
-    Busca por correspondência exata da subimagem na imagem maior.
-    Converte ambas para escala de cinza (uint8) antes da comparação.
+# def encontrar_subimagem_exata(imagem_maior, subimagem):
+#     """
+#     Busca por correspondência exata da subimagem na imagem maior.
+#     Converte ambas para escala de cinza (uint8) antes da comparação.
 
-    Parâmetros:
-        imagem_maior (np.ndarray): Imagem principal (qualquer formato).
-        subimagem (np.ndarray): Subimagem (template).
+#     Parâmetros:
+#         imagem_maior (np.ndarray): Imagem principal (qualquer formato).
+#         subimagem (np.ndarray): Subimagem (template).
 
-    Retorna:
-        tuple | None: (x, y) da posição onde a subimagem foi encontrada, ou None.
-    """
-    # Converte para escala de cinza se for colorido
-    if len(imagem_maior.shape) == 3:
-        imagem_maior = cv2.cvtColor(imagem_maior, cv2.COLOR_BGR2GRAY)
-    if len(subimagem.shape) == 3:
-        subimagem = cv2.cvtColor(subimagem, cv2.COLOR_BGR2GRAY)
+#     Retorna:
+#         tuple | None: (x, y) da posição onde a subimagem foi encontrada, ou None.
+#     """
+#     # Converte para escala de cinza se for colorido
+#     if len(imagem_maior.shape) == 3:
+#         imagem_maior = cv2.cvtColor(imagem_maior, cv2.COLOR_BGR2GRAY)
+#     if len(subimagem.shape) == 3:
+#         subimagem = cv2.cvtColor(subimagem, cv2.COLOR_BGR2GRAY)
 
-    # Garante o tipo uint8
-    imagem_maior = imagem_maior.astype(np.uint8)
-    subimagem = subimagem.astype(np.uint8)
+#     # Garante o tipo uint8
+#     imagem_maior = imagem_maior.astype(np.uint8)
+#     subimagem = subimagem.astype(np.uint8)
 
-    x, y = _buscar_subimagem_gray(imagem_maior, subimagem)
+#     x, y = _buscar_subimagem_gray(imagem_maior, subimagem)
 
-    return (x, y) if x != -1 else None
+#     return (x, y) if x != -1 else None

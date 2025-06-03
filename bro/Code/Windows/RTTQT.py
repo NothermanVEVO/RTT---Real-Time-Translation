@@ -1,4 +1,5 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtCore import QObject, pyqtSignal, QRunnable, QThreadPool
 import mtranslate
 from Code import Languages, TextProcess
 import Code.WindowScreenshot as WindowScreenshot
@@ -91,6 +92,8 @@ class UpdateThread(QtCore.QThread):
 
             result = WindowScreenshot.getWindowScreenshot(self.window_name)
 
+            if not result:
+                return
             img_pil = result[0]
             self.ocr_img_pil = img_pil  # passa a imagem para a thread OCR
 
@@ -128,6 +131,37 @@ class UpdateThread(QtCore.QThread):
     def stop(self):
         self.running = False
         self.wait()
+
+class TranslationWorkerSignals(QObject):
+    result = pyqtSignal(list, list, list, list)  # rects, cropped_imgs, inpainted_imgs, translated_texts
+
+class TranslationWorker(QRunnable):
+    def __init__(self, rectangles, cropped_imgs, inpainted_imgs, scale_x, scale_y):
+        super().__init__()
+        self.rectangles = rectangles
+        self.cropped_imgs = cropped_imgs
+        self.inpainted_imgs = inpainted_imgs
+        self.signals = TranslationWorkerSignals()
+        self.scale_x = scale_x
+        self.scale_y = scale_y
+
+    def run(self):
+        from Code import TextProcess  # evita problemas de thread com import
+        texts = [r.text for r in self.rectangles]
+        
+        for i in range(len(texts)):
+            if TextProcess.has_dictionary_loaded():
+                texts[i] = TextProcess.correct_phrase(texts[i])
+        
+        translated_texts = [None] * len(texts)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(translate, t): idx for idx, t in enumerate(texts)}
+            for future in as_completed(futures):
+                idx = futures[future]
+                translated_texts[idx] = future.result()
+
+        #! PODE OCORRER DOS 3 PRIMEIROS ARGUMENTOS SEREM PASSADOS COMO TUPLA
+        self.signals.result.emit(list(self.rectangles), list(self.cropped_imgs), list(self.inpainted_imgs), translated_texts)
 
 class RTTWindow(QtWidgets.QWidget):
     def __init__(self, window_name: str, x, y, width, height, fps):
@@ -230,91 +264,71 @@ class RTTWindow(QtWidgets.QWidget):
         #     return
 
 
-        texts = [rectangles[i].text for i in range(len(cropped_imgs))]
-
-        for i in range(len(texts)):
-            if TextProcess.has_dictionary_loaded():
-                print("Antes do correção: ", texts[i])
-                texts[i] = TextProcess.correct_phrase(texts[i])
-                print("Depois da correção: ", texts[i])
-
         if len(can_translate) > 0:
-            translated_texts = [None] * len(texts)
-            with ThreadPoolExecutor(max_workers=3) as executor:
-                futures = {executor.submit(translate, t): idx for idx, t in enumerate(texts)}
-                for future in as_completed(futures):
-                    idx = futures[future]
-                    translated_texts[idx] = future.result()
             can_translate.remove(True)
+            worker = TranslationWorker(rectangles, cropped_imgs, inpainted_imgs, scale_x, scale_y)
+            worker.signals.result.connect(self.handle_translation_result)
+            QThreadPool.globalInstance().start(worker)
+    
+    def handle_translation_result(self, rectangles, cropped_imgs, inpainted_imgs, translated_texts):
+        img_pil = next((s['img_pil'] for s in [latest_data] if s), None)
+        if not img_pil:
+            return
 
-            for i in range(len(cropped_imgs)):
-                rect = rectangles[i]
+        img_width, img_height = img_pil.size
+        scale_x = self.view.width() / img_width
+        scale_y = self.view.height() / img_height
 
-                # Calcular retângulo original do novo item
-                new_rect = Rectangle.Rectangle(
-                    x=rect.x,
-                    y=rect.y,
-                    width=rect.width,
-                    height=rect.height,
-                    text=rect.text,
+        for i in range(len(cropped_imgs)):
+            rect = rectangles[i]
+            new_rect = Rectangle.Rectangle(rect.x, rect.y, rect.width, rect.height, rect.text, '')
+
+            to_remove = []
+            for sub_img in self.sub_images:
+                existing_rect = Rectangle.Rectangle(
+                    x=sub_img.pixmap_item.x() / scale_x,
+                    y=sub_img.pixmap_item.y() / scale_y,
+                    width=sub_img.cropped_img.width,
+                    height=sub_img.cropped_img.height,
+                    text='',
                     translated_text=''
                 )
+                if Rectangle.rectangles_intersect(new_rect, existing_rect):
+                    to_remove.append(sub_img)
 
-                # Remover sub-imagens que colidem
-                to_remove = []
-                for sub_img in self.sub_images:
-                    existing_rect = Rectangle.Rectangle(
-                        x=sub_img.pixmap_item.x() / scale_x,
-                        y=sub_img.pixmap_item.y() / scale_y,
-                        width=sub_img.cropped_img.width,
-                        height=sub_img.cropped_img.height,
-                        text='',
-                        translated_text=''
-                    )
-                    if Rectangle.rectangles_intersect(new_rect, existing_rect):
-                        to_remove.append(sub_img)
+            for sub_img in to_remove:
+                self.scene.removeItem(sub_img.pixmap_item)
+                self.scene.removeItem(sub_img.text_item)
+                self.sub_images.remove(sub_img)
 
-                for sub_img in to_remove:
-                    self.scene.removeItem(sub_img.pixmap_item)
-                    self.scene.removeItem(sub_img.text_item)
-                    self.sub_images.remove(sub_img)
+            pixmap = pil2pixmap(inpainted_imgs[i])
+            pixmap_item = self.scene.addPixmap(pixmap)
+            pixmap_item.setPos(rect.x * scale_x, rect.y * scale_y)
+            pixmap_item.setZValue(1)
 
-                # Criar imagem
-                pixmap = pil2pixmap(inpainted_imgs[i])
-                pixmap_item = self.scene.addPixmap(pixmap)
-                pixmap_item.setPos(rect.x * scale_x, rect.y * scale_y)
-                pixmap_item.setZValue(1)
-                pixmap_item.setAcceptedMouseButtons(QtCore.Qt.NoButton)
-                pixmap_item.setFlag(QtWidgets.QGraphicsItem.ItemIsSelectable, False)
-                pixmap_item.setFlag(QtWidgets.QGraphicsItem.ItemIsMovable, False)
+            text_item = QtWidgets.QGraphicsTextItem(translated_texts[i])
+            text_item.setDefaultTextColor(Ocr.get_contrast_color(inpainted_imgs[i]))
+            font = QtGui.QFont("Arial", 12)
+            text_item.setFont(font)
+            text_item.setTextWidth(rect.width * scale_x)
+            text_item.setPos(rect.x * scale_x, rect.y * scale_y)
+            text_item.setZValue(2)
 
-                # Criar texto
-                text_item = QtWidgets.QGraphicsTextItem(translated_texts[i])
-                text_item.setDefaultTextColor(Ocr.get_contrast_color(inpainted_imgs[i]))
-                font = QtGui.QFont("Arial", 12)
-                text_item.setFont(font)
-                text_item.setTextWidth(rect.width * scale_x)
-                text_item.setPos(rect.x * scale_x, rect.y * scale_y)
-                text_item.setZValue(2)
-                text_item.setAcceptedMouseButtons(QtCore.Qt.NoButton)
-                text_item.setFlag(QtWidgets.QGraphicsItem.ItemIsSelectable, False)
-                text_item.setFlag(QtWidgets.QGraphicsItem.ItemIsMovable, False)
+            self.scene.addItem(text_item)
 
-                self.scene.addItem(text_item)
-
-                self.sub_images.append(SubImageText(
-                    rect.text,
-                    '',
-                    cropped_imgs[i],
-                    pixmap_item,
-                    text_item,
-                    str(uuid.uuid4())
-                ))
+            self.sub_images.append(SubImageText(
+                rect.text,
+                '',
+                cropped_imgs[i],
+                pixmap_item,
+                text_item,
+                str(uuid.uuid4())
+            ))
 
     def closeEvent(self, event):
         self.thread.stop()
         event.accept()
-    
+
 def translate(text : str) -> str:
     global lang_code_to
     try:

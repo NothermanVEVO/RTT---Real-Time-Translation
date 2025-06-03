@@ -59,7 +59,7 @@ _lang_map = {
 _alphabet_groups = {
     "Latim": {
         "sq", "de", "af", "az", "eu", "bs", "ca", "hr", "cs", "da", "nl", "en", "eo", "et",
-        "fi", "fr", "ga", "hu", "id", "is", "it", "lt", "lv", "ms", "mt", "no", "pl",
+        "fi", "fr", "ga", "hu", "id", "is", "it", "lt", "lv", "ms", "mt", "no", "pl", "pt",
         "pt-BR", "pt-PT", "ro", "rs_latin", "sk", "sl", "es", "sv", "tl", "tr", "vi"
     },
     "Cirílico": {
