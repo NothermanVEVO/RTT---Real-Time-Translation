@@ -13,10 +13,10 @@ def create(lang: str, use_model: bool = True, det_db_unclip_ratio: float = 1.6) 
     global _ocr
     if use_model:
         _ocr = PaddleOCR(use_angle_cls=True,
-                        #  det_model_dir='models\\ch_ppocr_server_v2.0_det_infer',
-                        #  rec_model_dir='models\\ch_ppocr_server_v2.0_rec_infer',
-                         det_model_dir='models\\en_PP-OCRv3_det_infer',
-                         rec_model_dir='models\\en_PP-OCRv3_rec_infer',
+                         det_model_dir='models\\ch_ppocr_server_v2.0_det_infer',
+                         rec_model_dir='models\\ch_ppocr_server_v2.0_rec_infer',
+                        #  det_model_dir='models\\en_PP-OCRv3_det_infer',
+                        #  rec_model_dir='models\\en_PP-OCRv3_rec_infer',
                          cls_model_dir='models\\ch_ppocr_mobile_v2.0_cls_infer',
                          ocr_version='PP-OCRv4',
                          use_space_char=True,

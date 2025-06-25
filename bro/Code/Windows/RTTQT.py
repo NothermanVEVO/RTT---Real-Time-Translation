@@ -14,6 +14,8 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import Code.Rectangle as Rectangle
 
+FULLSCREEN = "7935093159g1821-0814-0"
+
 _window = None
 _app = None
 _thread = None
@@ -25,6 +27,8 @@ can_translate = []
 
 lang_code_from : str
 lang_code_to : str
+
+is_fullscreen_mode = False
 
 class SubImageText:
     def __init__(self, text: str, translated_text, cropped_img, pixmap_item: QtWidgets.QGraphicsPixmapItem, text_item: QtWidgets.QGraphicsTextItem, id_: str):
@@ -38,18 +42,21 @@ class SubImageText:
 class UpdateThread(QtCore.QThread):
     updated = QtCore.pyqtSignal(object)
 
-    def __init__(self, window_name, fps):
+    def __init__(self, hwnd, fps):
         super().__init__()
-        self.window_name = window_name
+        self.hwnd = hwnd
         self.fps = fps
         self.running = True
-        self.ocr_img_pil = None  # imagem compartilhada com a thread de OCR
-        self.last_ocr_img_pil = None 
+        # self.ocr_img_pil = None  # imagem compartilhada com a thread de OCR
+        # self.last_ocr_img_pil = None
+        self.result = None
+        self.last_result = None
+        self.updated_screen = True
 
-    def func_1(self):
-        while self.running:
-            # TODO: implemente algo aqui
-            self.msleep(1000)
+    # def func_1(self):
+    #     while self.running:
+    #         # TODO: implemente algo aqui
+    #         self.msleep(1000)
 
     def run(self):
         global _window, latest_data, lang_code_from
@@ -62,40 +69,41 @@ class UpdateThread(QtCore.QThread):
         self.ocr_thread.start()
 
         while self.running:
-            names = WindowScreenshot.getWindowsNames()
-            names = [x for x in names if x != '' and not x.isspace()]
-            if names[1] != self.window_name:
-                print(names[1])
-                print("Janela nao está 100% em foco ou foi fechada")
-                _window.setWindowOpacity(0.0)
-                self.msleep(int(1000 / self.fps))
-                continue
+            if is_fullscreen_mode:
+                image = WindowScreenshot.getFullScreenshot([FULLSCREEN])
+                if not image:
+                    self.result = None
+                else:
+                    self.result = (image, 0, 0, image.size[0], image.size[1])
             else:
-                _window.setWindowOpacity(1.0)
+                # print(WindowScreenshot.getAllVisibleWindows())
+                if not any(window == self.hwnd for window, title in WindowScreenshot.getAllVisibleWindows()):
+                    print("Janela foi fechada")
+                    return
+                elif not WindowScreenshot.isWindowInFullFocus(self.hwnd, [FULLSCREEN]):
+                    print("Janela não está 100% em em foco")
+                    _window.setWindowOpacity(0.0)
+                    self.msleep(int(1000 / self.fps))
+                    continue
+                else:
+                    _window.setWindowOpacity(1.0)
 
-            # result = WindowScreenshot.getWindowScreenshot(self.window_name)
+                self.result = WindowScreenshot.getWindowScreenshot(self.hwnd)
+
+            if not self.result:
+                print("RESULT NAO EXISTE!")
+                return
+            elif self.last_result and self.updated_screen:
+                print("CHECKING...")
+                if are_images_equal(self.last_result[0], self.result[0]) and self.last_result[1] == self.result[1] and self.last_result[2] == self.result[2]:
+                    print("IMAGENS SAO IGUAIS E EM POSIÇÃO IGUAIS!")
+                    self.msleep(int(1000 / self.fps))
+                    continue
+            
+            # last_result = result
 
             # img_pil = result[0]
-            # rectangles = Ocr.get_rectangles_from_pil(img_pil, max_gap_distance=10)
-            # cropped_imgs = Ocr.crop_regions_from_pil(img_pil, rectangles)
-            # inpainted_imgs = Ocr.inpaint_area_regions_from_pil(img_pil, rectangles)
-
-            # data = {
-            #     'pos_dim': result[1:5],
-            #     'rectangles': rectangles,
-            #     'cropped_imgs': cropped_imgs,
-            #     'inpainted_imgs': inpainted_imgs,
-            #     'img_pil': img_pil
-            # }
-
-            # self.updated.emit(data)
-
-            result = WindowScreenshot.getWindowScreenshot(self.window_name)
-
-            if not result:
-                return
-            img_pil = result[0]
-            self.ocr_img_pil = img_pil  # passa a imagem para a thread OCR
+            # self.ocr_img_pil = img_pil  # passa a imagem para a thread OCR
 
             # Pega a última análise da thread OCR (caso esteja pronta)
             with latest_data_lock:
@@ -103,16 +111,23 @@ class UpdateThread(QtCore.QThread):
 
             if data:
                 # Atualiza posição da janela e envia dados para GUI
-                data['pos_dim'] = result[1:5]
+                data['pos_dim'] = self.result[1:5]
                 self.updated.emit(data)
+                self.updated_screen = True
+                self.last_result = self.result
             self.msleep(int(1000 / self.fps))
 
     def ocr_worker(self):
         global latest_data, can_translate
 
         while self.running:
-            if self.ocr_img_pil is not None and self.ocr_img_pil != self.last_ocr_img_pil:
-                img_pil = self.ocr_img_pil
+
+            if self.result and self.result[0]:
+                if self.last_result and self.result[0] == self.last_result[0]:
+                    continue
+            # if self.ocr_img_pil is not None and self.ocr_img_pil != self.last_ocr_img_pil:
+                # img_pil = self.ocr_img_pil
+                img_pil = self.result[0]
 
                 rectangles = Ocr.get_rectangles_from_pil(img_pil, max_gap_distance=10)
                 cropped_imgs = Ocr.crop_regions_from_pil(img_pil, rectangles)
@@ -125,7 +140,9 @@ class UpdateThread(QtCore.QThread):
                         'inpainted_imgs': inpainted_imgs,
                         'img_pil': img_pil
                     }
-                self.last_ocr_img_pil = self.ocr_img_pil
+                self.last_result = self.result
+                self.updated_screen = False
+                # self.last_ocr_img_pil = self.ocr_img_pil
                 can_translate.append(True)
 
     def stop(self):
@@ -151,7 +168,9 @@ class TranslationWorker(QRunnable):
         
         for i in range(len(texts)):
             if TextProcess.has_dictionary_loaded():
+                print("Texto ANTES da correção: ", texts[i])
                 texts[i] = TextProcess.correct_phrase(texts[i])
+                print("Texto DEPOIS da correção: ", texts[i])
         
         translated_texts = [None] * len(texts)
         with ThreadPoolExecutor(max_workers=3) as executor:
@@ -160,13 +179,15 @@ class TranslationWorker(QRunnable):
                 idx = futures[future]
                 translated_texts[idx] = future.result()
 
+        # translated_texts = texts
+
         #! PODE OCORRER DOS 3 PRIMEIROS ARGUMENTOS SEREM PASSADOS COMO TUPLA
         self.signals.result.emit(list(self.rectangles), list(self.cropped_imgs), list(self.inpainted_imgs), translated_texts)
 
 class RTTWindow(QtWidgets.QWidget):
-    def __init__(self, window_name: str, x, y, width, height, fps):
+    def __init__(self, hwnd: int, x, y, width, height, fps):
         super().__init__()
-        self.window_name = window_name
+        self.hwnd = hwnd
         self.fps = fps
         self.setWindowFlags(
             QtCore.Qt.FramelessWindowHint |
@@ -187,7 +208,7 @@ class RTTWindow(QtWidgets.QWidget):
 
         self.sub_images: List[SubImageText] = []
 
-        self.thread = UpdateThread(window_name, fps)
+        self.thread = UpdateThread(hwnd, fps)
         self.thread.updated.connect(self.on_update)
         self.thread.start()
 
@@ -235,10 +256,6 @@ class RTTWindow(QtWidgets.QWidget):
                 
                 # Atualize as listas com os dados filtrados corretamente
                 rectangles, cropped_imgs, inpainted_imgs = zip(*new_data) if new_data else ([], [], [])
-                # if sub_img.cropped_img in cropped_imgs:
-                #     print("xoo")
-                #     print("THE FUCKIN TEXT IS: ", sub_img.text)
-                #     cropped_imgs.remove(sub_img.cropped_img)
             else:
                 print("ho")
                 to_remove.append(sub_img)
@@ -247,22 +264,6 @@ class RTTWindow(QtWidgets.QWidget):
             self.scene.removeItem(sub_img.pixmap_item)
             self.scene.removeItem(sub_img.text_item)
             self.sub_images.remove(sub_img)
-
-        # if len(can_translate) == 0:
-        #     for sub_img in self.sub_images:
-        #         pos = Ocr.find_subimage_exact(Ocr.pil_to_cv(img_pil), Ocr.pil_to_cv(sub_img.cropped_img))
-        #         if pos:
-        #             sub_img.pixmap_item.setPos(pos[0] * scale_x, pos[1] * scale_y)
-        #             sub_img.text_item.setPos(pos[0] * scale_x, pos[1] * scale_y)
-        #             sub_img.pixmap_item.show()
-        #             sub_img.text_item.show()
-        #         else:
-        #             sub_img.pixmap_item.hide()
-        #             sub_img.text_item.hide()
-            
-        #     print("=======================================================")
-        #     return
-
 
         if len(can_translate) > 0:
             can_translate.remove(True)
@@ -350,10 +351,12 @@ def pil2pixmap(pil_img):
 def are_images_equal(img1: Image.Image, img2: Image.Image) -> bool:
     return img1.size == img2.size and img1.tobytes() == img2.tobytes()
 
-def create(window_name: str, x, y, width, height, fps: int, language_from: str, language_to: str):
-    global _window, _app, _thread, _exist, lang_code_from, lang_code_to
+def create(hwnd: int, x, y, width, height, fps: int, language_from: str, language_to: str, is_fullscreen: bool):
+    global _window, _app, _thread, _exist, lang_code_from, lang_code_to, is_fullscreen_mode
     if _exist:
         quit()
+
+    is_fullscreen_mode = is_fullscreen
 
     _app = QtWidgets.QApplication.instance()
     if not _app:
@@ -365,7 +368,8 @@ def create(window_name: str, x, y, width, height, fps: int, language_from: str, 
     print("lang code to: ", lang_code_to)
     TextProcess.create(language_from)
     
-    _window = RTTWindow(window_name, x, y, width, height, fps)
+    _window = RTTWindow(hwnd, x, y, width, height, fps)
+    _window.setWindowTitle(FULLSCREEN)
     _window.show()
     _exist = True
 

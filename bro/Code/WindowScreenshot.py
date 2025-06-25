@@ -174,28 +174,123 @@ def _copySnapshot(hwnd): # copy Window HBITMAP to clipboard
 def _getSnapshot(hwnd): # get Window HBITMAP as Image
     hbmp,w,h,img = _getWindowBMAP(hwnd,True); _gdi32.DeleteObject(hbmp); return img
 
-def getWindowScreenshot(window_name : str):
+# def getWindowScreenshot(window_name : str):
 
-    hwnd = None
-    if not hwnd: hwnd = _user32.FindWindowW(None, window_name)      # 1 Argument: ClassName | 2 Argument: WindowName
+#     hwnd = None
+#     if not hwnd: hwnd = _user32.FindWindowW(None, window_name)      # 1 Argument: ClassName | 2 Argument: WindowName
 
-    if not hwnd:
-        # print("Couldn't find Window")
+#     if not hwnd:
+#         # print("Couldn't find Window")
+#         return None
+#     elif _user32.IsIconic(hwnd):
+#         # print("Window is minimized")
+#         return None
+#     else:
+#         # print(win32gui.GetWindowText(hwnd))
+#         # print(win32gui.GetClassName(hwnd))
+#         # _copySnapshot(hwnd) #? TIRA UM PRINT DA TELA E DEIXA NO CLIPBOARD!
+#         img = _getSnapshot(hwnd)
+#         x, y, w, h = _get_full_window(hwnd)
+#         # return img, _X, _Y, _WIDTH, _HEIGHT
+#         return img, x, y, w, h
+def isWindowIconic(hwnd: int) -> bool:
+    return win32gui.IsIconic(hwnd)
+
+def isWindowInFullFocus(hwnd: int, exceptions: List[str] = []) -> bool:
+    visible_windows = getAllVisibleWindows()
+    to_remove = []
+    for exception in exceptions:
+        for _hwnd, title in visible_windows:
+            if title == exception:
+                to_remove.append((_hwnd, title))
+
+    for item in to_remove:
+        visible_windows.remove(item)
+    
+    _hwnd, _title = visible_windows[0]
+    # print("INPUT: ", hwnd, " | ACHADO: ", _hwnd)
+    return _hwnd == hwnd
+
+def getAllVisibleWindows():
+    windows = []
+
+    def callback(hwnd, _):
+        if win32gui.IsWindowVisible(hwnd) and win32gui.GetWindowText(hwnd):
+            title = win32gui.GetWindowText(hwnd)
+            windows.append((hwnd, title))
+
+    win32gui.EnumWindows(callback, None)
+    return windows
+
+def getWindowScreenshotByName(window_name: str, ignore_titles : List[str] = []):
+    hwnds = find_all_windows_by_title(window_name)
+
+    if not hwnds:
         return None
-    elif _user32.IsIconic(hwnd):
-        # print("Window is minimized")
+
+    ignore_titles_copy = ignore_titles.copy()
+    to_remove = []
+    for window in hwnds:
+        if window_name in ignore_titles_copy:
+            to_remove.append(window)
+            ignore_titles_copy.remove(window_name)
+    for window in to_remove:
+        hwnds.remove(window)
+    
+    hwnd = hwnds[0]
+
+    if win32gui.IsIconic(hwnd):
         return None
-    else:
-        # print(win32gui.GetWindowText(hwnd))
-        # print(win32gui.GetClassName(hwnd))
-        # _copySnapshot(hwnd) #? TIRA UM PRINT DA TELA E DEIXA NO CLIPBOARD!
-        img = _getSnapshot(hwnd)
-        x, y, w, h = _get_full_window(hwnd)
-        # return img, _X, _Y, _WIDTH, _HEIGHT
-        return img, x, y, w, h
+
+    img = _getSnapshot(hwnd)
+    x, y, w, h = _get_full_window(hwnd)
+    return img, x, y, w, h
+
+def getWindowScreenshot(hwnd: int):
+    if win32gui.IsIconic(hwnd):
+        return None
+
+    img = _getSnapshot(hwnd)
+    x, y, w, h = _get_full_window(hwnd)
+    return img, x, y, w, h
+
+def getFullScreenshot(exceptions: List[str] = []):
+    names = getWindowsNames()
+    name: str
+    results = []
+
+    ignore_titles = []
+    for name in reversed(names):
+        if name in exceptions:
+            continue
+        if not len(name) == 0 and not name.isspace():
+            result = getWindowScreenshotByName(name, ignore_titles)
+            if result and result[0]:
+                results.append(result)
+                ignore_titles.append(name)
+
+    if len(results) != 0:
+        image = results[0][0]
+        for result in results[1:]:
+            overlay = result[0].convert("RGBA")
+            # print("position: ", (result[1], result[2]))
+            image.paste(overlay, (result[1], result[2]), overlay)
+
+        # if len(exceptions) != 0: image.show()
+        return image
+    return None
 
 def getWindowsNames() -> List:
     return pygetwindow.getAllTitles()
+
+def enum_windows_callback(hwnd, results):
+    if win32gui.IsWindowVisible(hwnd) and win32gui.GetWindowText(hwnd):
+        results.append(hwnd)
+
+def find_all_windows_by_title(title):
+    hwnds = []
+    win32gui.EnumWindows(enum_windows_callback, hwnds)
+    return [hwnd for hwnd in hwnds if win32gui.GetWindowText(hwnd) == title]
 
 def _get_full_window(hwnd):
     # Retângulo da janela (inclui bordas e título)

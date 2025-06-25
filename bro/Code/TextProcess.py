@@ -33,6 +33,7 @@ CHAR_SUBSTITUTIONS = {
     '$': 's',
     '3': 'e',
     '5': 's',
+    '6': 'g',
     '7': 't',
     '8': 'b',
     '|': 'l',
@@ -45,6 +46,10 @@ def generate_variants(word):
             new_word = word[:i] + CHAR_SUBSTITUTIONS[c] + word[i+1:]
             variants.add(new_word)
     return variants
+
+def remove_unwanted_chars(text: str) -> str:
+    unwanted = set(CHAR_SUBSTITUTIONS.keys()) | set('0123456789')
+    return ''.join(c for c in text if c not in unwanted)
 
 def split_numbers_edge(word):
     """
@@ -70,9 +75,17 @@ def correct_word(word, min_frequency=10):
     global _sym_spell
     # Etapa 1: variantes de substituição
     variants = generate_variants(word)
-    for variant in variants:
-        if _sym_spell.words.get(variant, 0) >= min_frequency:
-            return variant
+    higher_frequency = -1
+    _variant = None
+    for variant in variants:# VAI SE FUDER, PENSEI NA PORRA DA SOLUÇÃO EM 1 SEGUNDO
+        variant = remove_unwanted_chars(variant)
+        frequency = _sym_spell.words.get(variant, 0)
+        # print("VARIANTE: ", variant, " | FREQUENCY: ", frequency)
+        if frequency >= higher_frequency:
+            higher_frequency = frequency
+            _variant = variant
+    if frequency >= min_frequency:
+        return _variant
 
     # Etapa 0: divisão por número no início/final
     split_number = split_numbers_edge(word)

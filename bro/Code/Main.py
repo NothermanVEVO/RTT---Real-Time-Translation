@@ -30,7 +30,9 @@ import re
 from symspellpy.symspellpy import SymSpell, Verbosity
 
 sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
-sym_spell.load_dictionary("dictionary\\2018\\vi\\vi_no_accent_50k.txt", term_index=0, count_index=1)
+sym_spell.load_dictionary("dictionary\\2018\\en\\en_50k.txt", term_index=0, count_index=1, encoding="utf-8")
+
+print(sym_spell.word_segmentation("sowhydo", max_edit_distance=0).corrected_string)
 
 CHAR_SUBSTITUTIONS = {
     '1': 'i',

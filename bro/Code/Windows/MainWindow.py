@@ -1,9 +1,9 @@
 import tkinter as tk
 from tkinter import ttk
-from tkinter import *
+from tkinter import Tk, Menu, END
 from PIL import ImageTk
 import Code.WindowScreenshot as WindowScreenshot
-import RTT
+# import RTT
 import RTTQT
 import Code.Languages as Languages
 
@@ -165,7 +165,7 @@ class ImagesGrid(tk.Frame):
 
         self.dados = novos_dados
 
-        for idx, (img_obj, texto) in enumerate(novos_dados):
+        for idx, (img_obj, hwnd, texto) in enumerate(novos_dados):
             frame_item = tk.Frame(self.frame_interno, width=self.largura_item, height=self.altura_item, relief="flat", bd=2)
             frame_item.pack_propagate(False)
 
@@ -185,7 +185,7 @@ class ImagesGrid(tk.Frame):
             texto_label.bind("<Button-1>", lambda e, idx=idx: self.selecionar_item(idx))
 
             self.itens.append(frame_item)
-            self.objetos.append((img_obj, texto))
+            self.objetos.append((img_obj, hwnd, texto))
 
         self.reorganizar()
 
@@ -226,7 +226,7 @@ class ImagesGrid(tk.Frame):
 
     def obter_item_selecionado(self):
         if self.selecionado is not None:
-            return self.objetos[self.selecionado]
+            return self.objetos[self.selecionado]#TODO, self.objetos.index(self.selecionado)
         return None
 
 windows = []
@@ -234,7 +234,9 @@ windows = []
 _window_width = 800
 _window_height = 600
 
-grade = None
+notebook = None
+grade1 = None
+grade2 = None
 _translate_from : ComboSuggestions
 _translate_to : ComboSuggestions
 
@@ -243,8 +245,10 @@ is_paused : bool = False
 
 _options = Languages.get_all_language_names()
 
+is_on_select_tab = True
+
 def create():
-    global grade, _translate_from, _translate_to, _options
+    global notebook, grade1, grade2, _translate_from, _translate_to, _options
 
     root = Tk()
     root.wm_title("RTT - Real Time Translation")
@@ -285,20 +289,49 @@ def create():
     conteiner.grid_columnconfigure(1, weight=0)
     conteiner.grid_columnconfigure(2, weight=1)
 
-    select_conteiner = tk.Frame(root, height=60)
+    # Notebook (abas)
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
+    
+    # === Aba 1: Selecionar Janela ===
+    aba1 = tk.Frame(notebook)
+    notebook.add(aba1, text="Selecionar Janela")
+    
+    # Container para seleção
+    select_conteiner = tk.Frame(aba1, height=60)
     select_conteiner.pack(fill=tk.X, padx=10, pady=10)
-
+    
     select_window = tk.Label(select_conteiner, text="Selecionar Janela:", font=("Segoe UI", 25, "bold"))
     select_window.grid(row=0, column=0, sticky="w", padx=(0, 5))
-
+    
     reload = ttk.Button(select_conteiner, text="R", width=10, command=reload_windows)
     reload.grid(row=0, column=1, sticky="e", padx=(5, 0), ipadx=10, ipady=5)
-
+    
     select_conteiner.grid_columnconfigure(0, weight=0)
     select_conteiner.grid_columnconfigure(1, weight=1)
+    
+    # Grade de imagens na aba 1
+    grade1 = ImagesGrid(aba1, [])
+    grade1.pack(fill=tk.X, padx=10, pady=10)
+    
+    # === Aba 2: Tela Cheia ===
+    aba2 = tk.Frame(notebook)
+    notebook.add(aba2, text="Tela Cheia")
 
-    grade = ImagesGrid(root, [])
-    grade.pack(fill=tk.X, padx=10, pady=10)
+    # Container para seleção
+    full_conteiner = tk.Frame(aba2, height=60)
+    full_conteiner.pack(fill=tk.X, padx=10, pady=10)
+    
+    select_window = tk.Label(full_conteiner, text="Tela Cheia:", font=("Segoe UI", 25, "bold"))
+    select_window.grid(row=0, column=0, sticky="w", padx=(0, 5))
+    
+    full_conteiner.grid_columnconfigure(0, weight=0)
+    full_conteiner.grid_columnconfigure(1, weight=1)
+    
+    # Grade de imagens na aba 2
+    grade2 = ImagesGrid(aba2, [])
+    grade2.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
     bottom_conteiner = tk.Frame(root, height=60)
     bottom_conteiner.pack(fill=tk.X, side="bottom", padx=10, pady=10)
@@ -318,6 +351,21 @@ def create():
 
     root.mainloop()
 
+def on_tab_changed(event):
+    global notebook, grade2, is_on_select_tab
+    aba_selecionada = event.widget.select()
+    indice = notebook.index(aba_selecionada)
+    if indice == 0: # SELECT TAB
+        is_on_select_tab = True
+        reload_windows()
+    elif indice == 1: # FULL SCREEN TAB
+        is_on_select_tab = False
+        screenshot = WindowScreenshot.getFullScreenshot()
+        if screenshot:
+            grade2.adicionar_dados([(screenshot, -1, "Tela Cheia")])
+        else:
+            print("ERRO AO TIRAR SCREENSHOT") #TODO
+
 def switch_languages():
     global _translate_from, _translate_to
     text_from = _translate_from.entry.get()
@@ -330,68 +378,69 @@ def switch_languages():
     _translate_to.entry.insert(0, text_from)
 
 def reload_windows():
-    global windows, grade
+    global windows, grade1
     windows.clear()
-    names = WindowScreenshot.getWindowsNames()
-    name: str
-    for name in names:
-        if not len(name) == 0 and not name.isspace():
-            result = WindowScreenshot.getWindowScreenshot(name)
-            if result and result[0]:
-                windows.append((result[0], name))
-    grade.adicionar_dados(windows)
+    # names = WindowScreenshot.getWindowsNames()
+    # ignore_titles = []
+    # for name in names:
+    #     if not len(name) == 0 and not name.isspace():
+    #         result = WindowScreenshot.getWindowScreenshot(name, ignore_titles)
+    #         if result and result[0]:
+    #             windows.append((result[0], name))
+    #             ignore_titles.append(name)
+    # grade1.adicionar_dados(windows)
+    for hwnd, title in WindowScreenshot.getAllVisibleWindows():
+        # print("title: ", title, " | hwnd:", hwnd)
+        if title == RTTQT.FULLSCREEN:
+            continue
+        result = WindowScreenshot.getWindowScreenshot(hwnd)
+        if result and result[0]:
+            windows.append((result[0], hwnd, title))
+    grade1.adicionar_dados(windows)
 
 def apply_window():
-    #! OLD
-    # if RTT.exists():
-    #     RTT.quit() ## TEM QUE TER ISSO KKKK
-    #     name = get_selected_window_name()
-    #     if not name:
-    #         return
-    #     result = WindowScreenshot.getWindowScreenshot(name)
-    #     RTT.create(name, result[1], result[2], result[3], result[4], 1)
-
-    #! NEW
-    # if RTTQT.exists():
-    #     if not is_languages_valid():#TODO
-    #         return
-    #     RTTQT.quit()
-    #     name = get_selected_window_name()
-    #     if not name:
-    #         return
-    #     result = WindowScreenshot.getWindowScreenshot(name)
-    #     # import t
-    #     # t.ImageWindow(name, result[1], result[2], result[3], result[4])
-    #     RTTQT.create(name, result[1], result[2], result[3], result[4], 1)
+    if RTTQT.exists():
+        if not is_languages_valid():#TODO
+            return
+        RTTQT.quit()
+        if is_on_select_tab:
+            hwnd = get_selected_window()
+            if not hwnd:
+                return
+            result = WindowScreenshot.getWindowScreenshot(hwnd)
+            RTTQT.create(hwnd, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)
+            # name = get_selected_window_name()
+            # result = WindowScreenshot.getWindowScreenshot(name)
+            # RTTQT.create(name, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)  
+        else:
+            # name = "Tela Cheia"
+            image = WindowScreenshot.getFullScreenshot()
+            RTTQT.create(-1, 0, 0, image.size[0], image.size[1], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)        
     pass
 
 def pause_app():
     pass
 
 def turn_on_off():
-    global _translate_from, _translate_to
-    # if RTT.exists():
-    #     RTT.quit()
-    # else:
-    #     # if not is_languages_valid():#TODO
-    #     #     return
-    #     name = get_selected_window_name()
-    #     if not name:
-    #         return
-    #     result = WindowScreenshot.getWindowScreenshot(name)
-    #     RTT.create(name, result[1], result[2], result[3], result[4], 1)
+    global _translate_from, _translate_to, is_on_select_tab
     if RTTQT.exists():
         RTTQT.quit()
     else:
         if not is_languages_valid():#TODO
             return
-        name = get_selected_window_name()
-        if not name:
-            return
-        result = WindowScreenshot.getWindowScreenshot(name)
-        # import t
-        # t.show_image_window(result[0], result[1], result[2], result[3], result[4])
-        RTTQT.create(name, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get())       
+        if is_on_select_tab:
+            hwnd = get_selected_window()
+            if not hwnd:
+                return
+            result = WindowScreenshot.getWindowScreenshot(hwnd)
+            RTTQT.create(hwnd, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)
+            # name = get_selected_window_name()
+            # result = WindowScreenshot.getWindowScreenshot(name)
+            # RTTQT.create(name, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)  
+        else:
+            # name = "Tela Cheia"
+            image = WindowScreenshot.getFullScreenshot()
+            RTTQT.create(-1, 0, 0, image.size[0], image.size[1], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)       
 
 def is_languages_valid() -> bool:
     global _translate_from, _translate_to, _options
@@ -402,10 +451,17 @@ def is_languages_valid() -> bool:
     return True
 
 def get_selected_window_name():
-    global grade
-    item = grade.obter_item_selecionado()
+    global grade1
+    item = grade1.obter_item_selecionado()
     if item:
-        return item[1]  # Retorna só a imagem (objeto PIL.Image)
+        return item[2]
+    return None
+
+def get_selected_window():
+    global grade1
+    item = grade1.obter_item_selecionado()
+    if item:
+        return item[1]
     return None
 
 create()
