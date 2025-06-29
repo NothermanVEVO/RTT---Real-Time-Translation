@@ -30,6 +30,9 @@ lang_code_to : str
 
 is_fullscreen_mode = False
 
+base_texts = [("", "")]
+LIMIT_OF_STRINGS = 2000
+
 class SubImageText:
     def __init__(self, text: str, translated_text, cropped_img, pixmap_item: QtWidgets.QGraphicsPixmapItem, text_item: QtWidgets.QGraphicsTextItem, id_: str):
         self.text = text
@@ -112,6 +115,7 @@ class UpdateThread(QtCore.QThread):
             if data:
                 # Atualiza posição da janela e envia dados para GUI
                 data['pos_dim'] = self.result[1:5]
+                data['img_pil'] = self.result[0]
                 self.updated.emit(data)
                 self.updated_screen = True
                 self.last_result = self.result
@@ -123,7 +127,7 @@ class UpdateThread(QtCore.QThread):
         while self.running:
 
             if self.result and self.result[0]:
-                if self.last_result and self.result[0] == self.last_result[0]:
+                if self.last_result and self.result[0] == self.last_result[0]: # Se a imagem for a mesma que a anterior, nao faz nada de diferente
                     continue
             # if self.ocr_img_pil is not None and self.ocr_img_pil != self.last_ocr_img_pil:
                 # img_pil = self.ocr_img_pil
@@ -241,6 +245,19 @@ class RTTWindow(QtWidgets.QWidget):
         cropped_imgs = data['cropped_imgs']
         inpainted_imgs = data['inpainted_imgs']
 
+        pre_to_remove = []
+        for i in range(len(rectangles)):
+            text : str = rectangles[i].text
+            alph_group = Languages.get_alphabet_group(lang_code_from)
+            if not text.strip() or not any(c.isalpha() for c in text) or not any(c.lower() not in "aeiou" and c.isalpha() for c in text) or (
+                (alph_group != "Chinês" and alph_group != "Japonês" and alph_group != "Coreano") and len(text.strip()) == 1):
+                    pre_to_remove.append(i)
+        
+        for i in sorted(pre_to_remove, reverse=True):
+            rectangles.pop(i)
+            cropped_imgs.pop(i)
+            inpainted_imgs.pop(i)
+
         to_remove = []
         for sub_img in self.sub_images:
             pos = Ocr.find_subimage_exact(Ocr.pil_to_cv(img_pil), Ocr.pil_to_cv(sub_img.cropped_img))  # TODO
@@ -256,6 +273,7 @@ class RTTWindow(QtWidgets.QWidget):
                 
                 # Atualize as listas com os dados filtrados corretamente
                 rectangles, cropped_imgs, inpainted_imgs = zip(*new_data) if new_data else ([], [], [])
+            #! SE TIVEREM TEXTOS IGUAIS, SO PEGAR A TRADUÇÃO
             else:
                 print("ho")
                 to_remove.append(sub_img)
@@ -330,14 +348,25 @@ class RTTWindow(QtWidgets.QWidget):
         self.thread.stop()
         event.accept()
 
+def append_translated_text(tuple : tuple) -> None:
+    global base_texts
+    if len(base_texts) >= LIMIT_OF_STRINGS:
+        base_texts.pop(0)
+    base_texts.append(tuple)
+
 def translate(text : str) -> str:
     global lang_code_to
     try:
+        tuple = next((t for t in base_texts if t[0] == text), None) #CONFERE SE EXISTA A TRADUÇÃO DA PALAVRA
+        if tuple:
+            print("Existe e eh: ", tuple[1])
+            return tuple[1]
         print("Antes da tradução: ", text)
         textx = mtranslate.translate(text, lang_code_to)
+        append_translated_text((text, textx))
         print("Depois da tradução: ", textx)
         return textx
-        # return mtranslate.translate(text, 'pt')
+        # print("Tradução: ", text, " | nao possue nenhum caracter do alfabeto!")
     except Exception as e:
         print(f"Erro: {e}")
         return text
@@ -367,7 +396,7 @@ def create(hwnd: int, x, y, width, height, fps: int, language_from: str, languag
     print("lang code from: ", lang_code_from)
     print("lang code to: ", lang_code_to)
     TextProcess.create(language_from)
-    
+
     _window = RTTWindow(hwnd, x, y, width, height, fps)
     _window.setWindowTitle(FULLSCREEN)
     _window.show()

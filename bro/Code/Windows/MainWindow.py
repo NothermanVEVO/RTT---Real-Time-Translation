@@ -380,15 +380,6 @@ def switch_languages():
 def reload_windows():
     global windows, grade1
     windows.clear()
-    # names = WindowScreenshot.getWindowsNames()
-    # ignore_titles = []
-    # for name in names:
-    #     if not len(name) == 0 and not name.isspace():
-    #         result = WindowScreenshot.getWindowScreenshot(name, ignore_titles)
-    #         if result and result[0]:
-    #             windows.append((result[0], name))
-    #             ignore_titles.append(name)
-    # grade1.adicionar_dados(windows)
     for hwnd, title in WindowScreenshot.getAllVisibleWindows():
         # print("title: ", title, " | hwnd:", hwnd)
         if title == RTTQT.FULLSCREEN:
@@ -409,11 +400,7 @@ def apply_window():
                 return
             result = WindowScreenshot.getWindowScreenshot(hwnd)
             RTTQT.create(hwnd, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)
-            # name = get_selected_window_name()
-            # result = WindowScreenshot.getWindowScreenshot(name)
-            # RTTQT.create(name, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)  
         else:
-            # name = "Tela Cheia"
             image = WindowScreenshot.getFullScreenshot()
             RTTQT.create(-1, 0, 0, image.size[0], image.size[1], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)        
     pass
@@ -434,11 +421,7 @@ def turn_on_off():
                 return
             result = WindowScreenshot.getWindowScreenshot(hwnd)
             RTTQT.create(hwnd, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)
-            # name = get_selected_window_name()
-            # result = WindowScreenshot.getWindowScreenshot(name)
-            # RTTQT.create(name, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)  
         else:
-            # name = "Tela Cheia"
             image = WindowScreenshot.getFullScreenshot()
             RTTQT.create(-1, 0, 0, image.size[0], image.size[1], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)       
 

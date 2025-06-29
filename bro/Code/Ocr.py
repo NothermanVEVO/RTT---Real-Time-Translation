@@ -142,7 +142,7 @@ def find_subimage(image: np.ndarray, subimage: np.ndarray, threshold: float = 0.
 
     return posicao[0]
 
-def find_subimage_exact(image: np.ndarray, subimage: np.ndarray, tolerance: float = 1e-1) -> Optional[Tuple[int, int]]:
+def find_subimage_exact(image: np.ndarray, subimage: np.ndarray, tolerance: float = 1e-2) -> Optional[Tuple[int, int]]:
     if len(image.shape) == 3:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     if len(subimage.shape) == 3:
@@ -176,6 +176,8 @@ def get_contrast_color(pil_image: Image.Image) -> QtGui.QColor:
     # Se a luminância for alta, retorna preto. Caso contrário, branco.
     return QtGui.QColor('black') if luminance > 128 else QtGui.QColor('white')
 
+def are_images_equal(img1: Image.Image, img2: Image.Image) -> bool:
+    return img1.size == img2.size and img1.tobytes() == img2.tobytes()
 
 # from numba import njit
 
