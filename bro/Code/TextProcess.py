@@ -133,21 +133,22 @@ def force_split(word: str, min_freq: int = 10) -> str:
     if word in _sym_spell._words:
         return word
 
-    best = (word, 0)
+    # best = (word, 0) #TODO MELHORAR ISSO, SE TIVER 3 PALAVRAS JUNTAS OU MAIS, N ADIANTA MT KKKK
 
-    for i in range(1, len(word)):
-        left = word[:i]
-        right = word[i:]
-        freq_left = _sym_spell._words.get(left, 0)
-        freq_right = _sym_spell._words.get(right, 0)
+    # for i in range(1, len(word)):
+    #     left = word[:i]
+    #     right = word[i:]
+    #     freq_left = _sym_spell._words.get(left, 0)
+    #     freq_right = _sym_spell._words.get(right, 0)
 
-        if left in _sym_spell._words and right in _sym_spell._words:
-            if freq_left >= min_freq and freq_right >= min_freq:
-                total_freq = freq_left + freq_right
-                if total_freq > best[1]:
-                    best = (f"{left} {right}", total_freq)
+    #     if left in _sym_spell._words and right in _sym_spell._words:
+    #         if freq_left >= min_freq and freq_right >= min_freq:
+    #             total_freq = freq_left + freq_right
+    #             if total_freq > best[1]:
+    #                 best = (f"{left} {right}", total_freq)
 
-    return best[0]
+    # return best[0]
+    return word
 
 def correct_phrase(text: str) -> str:
     global _sym_spell
@@ -158,6 +159,11 @@ def correct_phrase(text: str) -> str:
 
     while i < len(tokens):
         token = tokens[i]
+
+        #! MELHORA ISSO AQ: Exs: I -> I, M -> , I'M -> I'
+        # if len(token) == 1 and token not in "aeiouAEIOU": #TODO ISSO FUNCIONA SOH NO ALFABETO LATINO
+        #     i += 1
+        #     continue
 
         # Tenta unir palavras com hífen no meio (ex: sur- + prised → surprised)
         match_hyphen = re.match(r"^(\w+)-$", token)
@@ -219,10 +225,20 @@ def correct_phrase(text: str) -> str:
 
             if any(char.isdigit() for char in possibly_split):
                 corrected = possibly_split
-                
+            elif any(char.isalpha() for char in possibly_split):
+                # suggestions = _sym_spell.lookup_compound(possibly_split, max_edit_distance=2)
+                # corrected = suggestions[0].term if suggestions else possibly_split
+                corrected_words = []
+                segmented = _sym_spell.word_segmentation(possibly_split, max_edit_distance=2)
+                for w in segmented.corrected_string.split():
+                    suggestions = _sym_spell.lookup(w, Verbosity.TOP, max_edit_distance=2)
+                    if suggestions:
+                        corrected_words.append(suggestions[0].term)
+                    else:
+                        corrected_words.append(w)
+                corrected = " ".join(corrected_words)
             else:
-                suggestions = _sym_spell.lookup_compound(possibly_split, max_edit_distance=2)
-                corrected = suggestions[0].term if suggestions else possibly_split
+                corrected = " " + possibly_split
 
         corrected_parts.append(corrected + punct)
 

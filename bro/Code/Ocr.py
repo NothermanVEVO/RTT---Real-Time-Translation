@@ -11,29 +11,38 @@ _ocr: PaddleOCR
 
 def create(lang: str, use_model: bool = True, det_db_unclip_ratio: float = 1.6) -> None:
     global _ocr
-    if use_model:
-        _ocr = PaddleOCR(use_angle_cls=True,
-                         det_model_dir='models\\ch_ppocr_server_v2.0_det_infer',
-                         rec_model_dir='models\\ch_ppocr_server_v2.0_rec_infer',
-                        #  det_model_dir='models\\en_PP-OCRv3_det_infer',
-                        #  rec_model_dir='models\\en_PP-OCRv3_rec_infer',
-                         cls_model_dir='models\\ch_ppocr_mobile_v2.0_cls_infer',
-                         ocr_version='PP-OCRv4',
-                         use_space_char=True,
-                         unclip_ratio=0.8,
-                         use_dilation=True,
-                         det_db_box_thresh=0.6,
-                         det_db_unclip_ratio=det_db_unclip_ratio,
-                         lang=lang)
-    else:
-        _ocr = PaddleOCR(use_angle_cls=True,
-                         ocr_version='PP-OCRv4',
-                         use_space_char=True,
-                         unclip_ratio=0.8,
-                         use_dilation=True,
-                         det_db_box_thresh=0.6,
-                         det_db_unclip_ratio=det_db_unclip_ratio,
-                         lang=lang)
+    # if use_model:
+    #     _ocr = PaddleOCR(use_angle_cls=True,
+    #                      det_model_dir='models\\ch_ppocr_server_v2.0_det_infer',
+    #                      rec_model_dir='models\\ch_ppocr_server_v2.0_rec_infer',
+    #                     #  det_model_dir='models\\en_PP-OCRv3_det_infer',
+    #                     #  rec_model_dir='models\\en_PP-OCRv3_rec_infer',
+    #                      cls_model_dir='models\\ch_ppocr_mobile_v2.0_cls_infer',
+    #                      ocr_version='PP-OCRv4',
+    #                      use_space_char=True,
+    #                      unclip_ratio=0.8,
+    #                      use_dilation=True,
+    #                      det_db_box_thresh=0.6,
+    #                      det_db_unclip_ratio=det_db_unclip_ratio,
+    #                      lang=lang)
+    # else:
+    #     _ocr = PaddleOCR(use_angle_cls=True,
+    #                      ocr_version='PP-OCRv4',
+    #                      use_space_char=True,
+    #                      unclip_ratio=0.8,
+    #                      use_dilation=True,
+    #                      det_db_box_thresh=0.6,
+    #                      det_db_unclip_ratio=det_db_unclip_ratio,
+    #                      lang=lang)
+    _ocr = PaddleOCR(
+    use_doc_orientation_classify=False, # Disables document orientation classification model via this parameter
+    use_doc_unwarping=False, # Disables text image rectification model via this parameter
+    use_textline_orientation=False, # Disables text line orientation classification model via this parameter
+    # text_detection_model_name="PP-OCRv5_mobile_det",
+    # text_recognition_model_name="PP-OCRv5_mobile_rec",
+    # text_detection_model_dir="models/PP-OCRv5_mobile_det_infer",
+    # text_recognition_model_dir="models/PP-OCRv5_mobile_rec_infer"
+)
     print("OCR CRIADO COM O LANG = \"", lang, "\"")
 
 def pil_to_cv(image: Image.Image) -> np.ndarray:
@@ -42,14 +51,36 @@ def pil_to_cv(image: Image.Image) -> np.ndarray:
 def cv_to_pil(image: np.ndarray) -> Image.Image:
     return Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
+# def get_rectangles_from_pil(image: Image.Image, image_scale: float = 1.0, max_gap_distance: int = 10) -> List[Rectangle.Rectangle]:
+#     image_cv = pil_to_cv(image)
+#     rectangles = []
+
+#     resultados = _ocr.ocr(image_cv, cls=True)[0]
+
+#     for resultado in resultados:
+#         bbox, (texto, confianca) = resultado
+
+#         x_coords = [p[0] for p in bbox]
+#         y_coords = [p[1] for p in bbox]
+#         x_min = int(min(x_coords) * image_scale)
+#         y_min = int(min(y_coords) * image_scale)
+#         x_max = int(max(x_coords) * image_scale)
+#         y_max = int(max(y_coords) * image_scale)
+
+#         rect = Rectangle.Rectangle(x_min, y_min, x_max - x_min, y_max - y_min, texto, '')
+#         rectangles.append(rect)
+
+#     return Rectangle.find_and_merge_close_rectangles(rectangles, max_distance=max_gap_distance)
 def get_rectangles_from_pil(image: Image.Image, image_scale: float = 1.0, max_gap_distance: int = 10) -> List[Rectangle.Rectangle]:
     image_cv = pil_to_cv(image)
     rectangles = []
 
-    resultados = _ocr.ocr(image_cv, cls=True)[0]
+    resultados = _ocr.predict(image_cv)[0]
 
-    for resultado in resultados:
-        bbox, (texto, confianca) = resultado
+    texts = resultados['rec_texts']
+    boxes = resultados['rec_polys']
+
+    for texto, bbox in zip(texts, boxes):
 
         x_coords = [p[0] for p in bbox]
         y_coords = [p[1] for p in bbox]

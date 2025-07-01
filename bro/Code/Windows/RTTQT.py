@@ -82,6 +82,7 @@ class UpdateThread(QtCore.QThread):
                 # print(WindowScreenshot.getAllVisibleWindows())
                 if not any(window == self.hwnd for window, title in WindowScreenshot.getAllVisibleWindows()):
                     print("Janela foi fechada")
+                    quit()
                     return
                 elif not WindowScreenshot.isWindowInFullFocus(self.hwnd, [FULLSCREEN]):
                     print("Janela não está 100% em em foco")
@@ -95,6 +96,7 @@ class UpdateThread(QtCore.QThread):
 
             if not self.result:
                 print("RESULT NAO EXISTE!")
+                quit()
                 return
             elif self.last_result and self.updated_screen:
                 print("CHECKING...")
