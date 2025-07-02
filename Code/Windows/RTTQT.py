@@ -246,7 +246,10 @@ class RTTWindow(QtWidgets.QWidget):
             pos = Ocr.find_subimage_exact(Ocr.pil_to_cv(img_pil), Ocr.pil_to_cv(sub_img.cropped_img))
             if pos:
                 sub_img.pixmap_item.setPos(pos[0] * scale_x, pos[1] * scale_y)
-                sub_img.text_item.setPos(pos[0] * scale_x, pos[1] * scale_y)
+                bounding = sub_img.text_item.path().boundingRect()
+                adjust_x = -bounding.x()
+                adjust_y = -bounding.y()
+                sub_img.text_item.setPos(pos[0] * scale_x + adjust_x, pos[1] * scale_y + adjust_y)
                 new_data = []
                 for rect, cropped, inpainted in zip(rectangles, cropped_imgs, inpainted_imgs):
                     if not any(are_images_equal(sub_img.cropped_img, cropped) for sub_img in self.sub_images):
@@ -302,13 +305,46 @@ class RTTWindow(QtWidgets.QWidget):
             pixmap_item.setPos(rect.x * scale_x, rect.y * scale_y)
             pixmap_item.setZValue(1)
 
-            text_item = QtWidgets.QGraphicsTextItem(translated_texts[i])
-            # print(f"{translated_texts[i]}\n({rect.text.count(' ') + 1} retângulos, Altura média: {rect.height:.1f})")
-            text_item.setDefaultTextColor(Ocr.get_contrast_color(inpainted_imgs[i]))
-            font = QtGui.QFont("Arial", int(rect.height / 3))
-            text_item.setFont(font)
-            text_item.setTextWidth(rect.width * scale_x)
-            text_item.setPos(rect.x * scale_x, rect.y * scale_y)
+            # text_item = QtWidgets.QGraphicsTextItem(translated_texts[i])
+            # # print(f"{translated_texts[i]}\n({rect.text.count(' ') + 1} retângulos, Altura média: {rect.height:.1f})")
+            # text_item.setDefaultTextColor(Ocr.get_contrast_color(inpainted_imgs[i]))
+            # font = QtGui.QFont("Arial", int(rect.height / 3))
+            # text_item.setFont(font)
+            # text_item.setTextWidth(rect.width * scale_x)
+            # text_item.setPos(rect.x * scale_x, rect.y * scale_y)
+            # text_item.setZValue(2)
+
+            # self.scene.addItem(text_item)
+
+            font_size = int(rect.height / 3)
+
+            # Define fonte e texto
+            font = QtGui.QFont("Arial", font_size)
+            text = translated_texts[i]
+            color = Ocr.get_contrast_color(inpainted_imgs[i])
+
+            # Cria path com o texto
+            path = QtGui.QPainterPath()
+            path.addText(0, 0, font, text)
+
+            outline_size = 1
+            if outline_size > 30 and outline_size < 50:
+                outline_size = 2
+            elif outline_size >= 50:
+                outline_size = 3
+            # Define contorno e preenchimento
+            pen = QtGui.QPen(QtCore.Qt.white if color == QtGui.QColor('black') else QtCore.Qt.black, 1)
+            brush = QtGui.QBrush(color)
+
+            # Cria item de caminho com contorno
+            text_item = QtWidgets.QGraphicsPathItem(path)
+            text_item.setPen(pen)
+            text_item.setBrush(brush)
+            bounding = path.boundingRect()
+            text_item.setPos(
+                rect.x * scale_x - bounding.x(),
+                rect.y * scale_y - bounding.y()
+            )
             text_item.setZValue(2)
 
             self.scene.addItem(text_item)

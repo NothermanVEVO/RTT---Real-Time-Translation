@@ -6,6 +6,9 @@ import Code.WindowScreenshot as WindowScreenshot
 # import RTT
 import RTTQT
 import Code.Languages as Languages
+from tkinter import simpledialog
+
+root = None
 
 class ComboSuggestions(tk.Frame):
     def __init__(self, master, opcoes, *args, **kwargs):
@@ -248,7 +251,7 @@ _options = Languages.get_all_language_names()
 is_on_select_tab = True
 
 def create():
-    global notebook, grade1, grade2, _translate_from, _translate_to, _options
+    global root, notebook, grade1, grade2, _translate_from, _translate_to, _options
 
     root = Tk()
     root.wm_title("RTT - Real Time Translation")
@@ -392,19 +395,26 @@ def reload_windows():
 
 def apply_window():
     if RTTQT.exists():
-        if not is_languages_valid():#TODO
+        is_valid = is_languages_valid()
+        if is_valid != 0:
+            if is_valid == 1:
+                abrir_dialogo("A String do traduzir de: \"" + _translate_from.entry.get() + "\" não existe!")
+            elif is_valid == 2:
+                abrir_dialogo("A String do traduzir para: \"" + _translate_to.entry.get() + "\" não existe!")
+            else:
+                abrir_dialogo("A String do traduzir de e traduzir para não podem ser iguais!")
             return
         RTTQT.quit()
         if is_on_select_tab:
             hwnd = get_selected_window()
             if not hwnd:
+                abrir_dialogo("Você precisa selecionar uma janela!")
                 return
             result = WindowScreenshot.getWindowScreenshot(hwnd)
             RTTQT.create(hwnd, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)
         else:
             image = WindowScreenshot.getFullScreenshot()
-            RTTQT.create(-1, 0, 0, image.size[0], image.size[1], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)        
-    pass
+            RTTQT.create(-1, 0, 0, image.size[0], image.size[1], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)
 
 def pause_app():
     pass
@@ -414,11 +424,19 @@ def turn_on_off():
     if RTTQT.exists():
         RTTQT.quit()
     else:
-        if not is_languages_valid():#TODO
+        is_valid = is_languages_valid()
+        if is_valid != 0:
+            if is_valid == 1:
+                abrir_dialogo("A String do traduzir de: \"" + _translate_from.entry.get() + "\" não existe!")
+            elif is_valid == 2:
+                abrir_dialogo("A String do traduzir para: \"" + _translate_to.entry.get() + "\" não existe!")
+            else:
+                abrir_dialogo("A String do traduzir de e traduzir para não podem ser iguais!")
             return
         if is_on_select_tab:
             hwnd = get_selected_window()
             if not hwnd:
+                abrir_dialogo("Você precisa selecionar uma janela!")
                 return
             result = WindowScreenshot.getWindowScreenshot(hwnd)
             RTTQT.create(hwnd, result[1], result[2], result[3], result[4], 1, _translate_from.entry.get(), _translate_to.entry.get(), not is_on_select_tab)
@@ -428,11 +446,13 @@ def turn_on_off():
 
 def is_languages_valid() -> bool:
     global _translate_from, _translate_to, _options
-    if not _translate_to.entry.get() in _options or not _translate_from.entry.get() in _options:
-        return False
+    if not _translate_to.entry.get() in _options:
+        return 1
+    elif not _translate_from.entry.get() in _options:
+        return 2
     if _translate_to.entry.get() == _translate_from.entry.get():
-        return False
-    return True
+        return 3
+    return 0
 
 def get_selected_window_name():
     global grade1
@@ -447,5 +467,26 @@ def get_selected_window():
     if item:
         return item[1]
     return None
+
+def abrir_dialogo(text: str):
+    dialogo = tk.Toplevel(root)
+    dialogo.title("Janela de Diálogo")
+    window_width = 300
+    window_height = 150
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    pos_x = (screen_width - window_width) // 2
+    pos_y = (screen_height - window_height) // 2
+    dialogo.geometry(f"{window_width}x{window_height}+{pos_x}+{pos_y}")
+
+    dialogo.grab_set()
+
+    label = tk.Label(dialogo, text=text, font=("Arial", 12), wraplength=270, justify="left")
+    label.pack(pady=20)
+
+    btn_fechar = tk.Button(dialogo, text="Ok", command=dialogo.destroy)
+    btn_fechar.pack()
+
+    dialogo.wait_window()
 
 create()
